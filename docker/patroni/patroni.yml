@@ -1,0 +1,70 @@
+scope: postgres-cluster
+namespace: /service/
+name: "{{PATRONI_NAME}}"
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: "{{PATRONI_RESTAPI_CONNECT_ADDRESS}}"
+
+
+etcd:
+  host: "etcd:2379"
+  etcd_api: 3
+
+bootstrap:
+  post_bootstrap: >
+    bash -c "psql -v ON_ERROR_STOP=1 -d postgres -U postgres -h localhost -p 5432 -c \"DO \$\$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='admin') THEN
+        EXECUTE format('CREATE ROLE admin WITH LOGIN PASSWORD %L SUPERUSER CREATEDB', '${PATRONI_POSTGRESQL_SUPERUSER_PASSWORD}');
+      END IF;
+      ALTER ROLE postgres WITH PASSWORD '${PATRONI_POSTGRESQL_SUPERUSER_PASSWORD}';
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='replicator') THEN
+        EXECUTE format('CREATE ROLE replicator WITH LOGIN PASSWORD %L REPLICATION', '${PATRONI_POSTGRESQL_REPLICATION_PASSWORD}');
+      END IF;
+    END; \$\$\""
+
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - host all all 0.0.0.0/0 md5
+    - host replication replicator 0.0.0.0/0 md5
+
+  tags:
+    nofailover: false
+    noloadbalance: false
+    clonefrom: false
+    nosync: false
+    replica_priority: "{{PATRONI_PRIORITY}}"
+
+postgresql:
+  listen: "{{PATRONI_POSTGRESQL_LISTEN}}"
+  connect_address: "{{PATRONI_POSTGRESQL_CONNECT_ADDRESS}}"
+  data_dir: "{{PATRONI_POSTGRESQL_DATA_DIR}}"
+  bin_dir: "{{PATRONI_POSTGRESQL_BIN_DIR}}"
+  authentication:
+    superuser:
+      username: postgres
+      password: "{{PATRONI_POSTGRESQL_SUPERUSER_PASSWORD}}"
+    replication:
+      username: replicator
+      password: "{{PATRONI_POSTGRESQL_REPLICATION_PASSWORD}}"
+  parameters:
+    shared_buffers: 128MB
+    max_connections: 100
+    unix_socket_directories: '/tmp'
+    shared_preload_libraries: "pg_stat_statements"
+    pg_stat_statements.max: 10000
+    pg_stat_statements.track: all
+    pg_stat_statements.track_utility: on
+    pg_stat_statements.track_planning: off
+  use_pg_rewind: true
+  create_replica_methods:
+    - basebackup

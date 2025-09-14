@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS activity_history;
+DROP TABLE IF EXISTS devices;
+DROP TYPE IF EXISTS device_type;
+DROP TABLE IF EXISTS actions;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;

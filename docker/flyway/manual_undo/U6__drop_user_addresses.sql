@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS user_addresses CASCADE;
+DROP TABLE IF EXISTS addresses CASCADE;
+
+DROP TYPE IF EXISTS address_type;

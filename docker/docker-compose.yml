@@ -1,0 +1,284 @@
+services: 
+  db-setup:
+    image: postgres:17.4
+    container_name: db-setup
+    depends_on:
+      - haproxy
+    volumes:
+      - ./flyway/migrations:/flyway/migrations
+      - ./flyway/conf:/flyway/conf
+      - ./flyway/scripts:/scripts
+    entrypoint: ["/scripts/entrypoint.sh"]
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - ANALYST_NAMES=${ANALYST_NAMES}
+      - MIGRATOR_PASSWORD=${MIGRATOR_PASSWORD}
+
+  db_backup:
+    build:
+      context: ./backup
+    container_name: db_backup
+    depends_on:
+      - haproxy
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TARGET_DB=${TARGET_DB}
+      - BACKUP_RETENTION_COUNT=${BACKUP_RETENTION_COUNT}
+      - BACKUP_INTERVAL_CRON=${BACKUP_INTERVAL_CRON}
+    volumes:
+      - ./backup/data:/backups
+
+  db-migrate:
+    build:
+      context: ./flyway/scripts
+      dockerfile: migration.Dockerfile
+    container_name: db-migrate
+    depends_on:
+      - db-setup
+    volumes:
+      - ./flyway/migrations:/flyway/migrations
+      - ./flyway/manual_undo:/undo
+      - ./flyway/conf:/flyway/conf
+      - ./flyway/scripts:/scripts
+    entrypoint: ["/scripts/migrate-script.sh"]
+    environment:
+      - FLYWAY_URL=jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${TARGET_DB}
+      - FLYWAY_USER=migrator
+      - FLYWAY_PASSWORD=${MIGRATOR_PASSWORD}
+      - MIGRATION_VERSION=${MIGRATION_VERSION}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - MIGRATION_VERSION=${MIGRATION_VERSION}
+      - TARGET_DB=${TARGET_DB}
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.9
+    container_name: etcd
+    restart: unless-stopped
+    environment:
+      - ETCD_NAME=etcd
+      - ETCD_ENABLE_V2=true
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd:2380
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_INITIAL_CLUSTER=etcd=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster-2
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    volumes:
+      - etcd_data:/etcd-data
+
+  patroni1:
+    container_name: patroni1
+    build:
+      context: ./patroni
+      dockerfile: patroni.Dockerfile
+    depends_on:
+      - etcd
+    environment:
+      PATRONI_PRIORITY: 3
+      PATRONI_NAME: "node1"
+      PATRONI_SCOPE: "postgres-cluster"
+      PATRONI_ETCD_HOSTS: "etcd:2379"
+      PATRONI_RESTAPI_LISTEN: "0.0.0.0:8008"
+      PATRONI_RESTAPI_CONNECT_ADDRESS: "patroni1:8008"
+      PATRONI_POSTGRESQL_DATA_DIR: "/data/patroni"
+      PATRONI_POSTGRESQL_BIN_DIR: "/usr/lib/postgresql/17.2/bin"
+      PATRONI_POSTGRESQL_LISTEN: "0.0.0.0:5432"
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: "patroni1:5432"
+      PATRONI_POSTGRESQL_SUPERUSER_PASSWORD: "${POSTGRES_PASSWORD}"
+      PATRONI_POSTGRESQL_REPLICATION_USERNAME: "replicator"
+      PATRONI_POSTGRESQL_REPLICATION_PASSWORD: "replicator_pass"
+      PATRONI_POSTGRESQL_DATABASE: "${TARGET_DB}"
+      PATRONI_POSTGRESQL_USERNAME: postgres
+      PATRONI_POSTGRESQL_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - ./patroni/post_bootstrap.sql:/docker-entrypoint-initdb.d/post_bootstrap.sql
+      - patroni1_data:/var/lib/postgresql/data
+      - ./patroni/patroni.yml:/etc/patroni.yml:ro
+    ports:
+      - "5433:5432"
+      - "8008:8008"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  patroni2:
+    build:
+      context: ./patroni
+      dockerfile: patroni.Dockerfile
+    container_name: patroni2
+    depends_on:
+      - patroni1
+    environment:
+      PATRONI_PRIORITY: 2
+      PATRONI_NAME: "node2"
+      PATRONI_SCOPE: "postgres-cluster"
+      PATRONI_ETCD_HOSTS: "etcd:2379"
+      PATRONI_RESTAPI_LISTEN: "0.0.0.0:8008"
+      PATRONI_RESTAPI_CONNECT_ADDRESS: "patroni2:8008"
+      PATRONI_POSTGRESQL_DATA_DIR: "/data/patroni"
+      PATRONI_POSTGRESQL_BIN_DIR: "/usr/lib/postgresql/17.2/bin"
+      PATRONI_POSTGRESQL_LISTEN: "0.0.0.0:5432"
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: "patroni2:5432"
+      PATRONI_POSTGRESQL_SUPERUSER_PASSWORD: "${POSTGRES_PASSWORD}"
+      PATRONI_POSTGRESQL_REPLICATION_USERNAME: "replicator"
+      PATRONI_POSTGRESQL_REPLICATION_PASSWORD: "replicator_pass"
+      PATRONI_POSTGRESQL_DATABASE: "${TARGET_DB}"
+      PATRONI_POSTGRESQL_USERNAME: postgres
+      PATRONI_POSTGRESQL_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - ./patroni/post_bootstrap.sql:/docker-entrypoint-initdb.d/post_bootstrap.sql
+      - patroni2_data:/var/lib/postgresql/data
+      - ./patroni/patroni.yml:/etc/patroni.yml:ro
+    ports:
+      - "5434:5432"
+      - "8018:8008"
+
+  patroni3:
+    build:
+      context: ./patroni
+      dockerfile: patroni.Dockerfile
+    container_name: patroni3
+    depends_on:
+      - patroni2
+    environment:
+      PATRONI_PRIORITY: 1
+      PATRONI_NAME: "node3"
+      PATRONI_SCOPE: "postgres-cluster"
+      PATRONI_ETCD_HOSTS: "etcd:2379"
+      PATRONI_RESTAPI_LISTEN: "0.0.0.0:8008"
+      PATRONI_RESTAPI_CONNECT_ADDRESS: "patroni3:8008"
+      PATRONI_POSTGRESQL_DATA_DIR: "/data/patroni"
+      PATRONI_POSTGRESQL_BIN_DIR: "/usr/lib/postgresql/17.2/bin"
+      PATRONI_POSTGRESQL_LISTEN: "0.0.0.0:5432"
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: "patroni3:5432"
+      PATRONI_POSTGRESQL_SUPERUSER_PASSWORD: "${POSTGRES_PASSWORD}"
+      PATRONI_POSTGRESQL_REPLICATION_USERNAME: "replicator"
+      PATRONI_POSTGRESQL_REPLICATION_PASSWORD: "replicator_pass"
+      PATRONI_POSTGRESQL_DATABASE: "${TARGET_DB}"
+      PATRONI_POSTGRESQL_USERNAME: postgres
+      PATRONI_POSTGRESQL_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - ./patroni/post_bootstrap.sql:/docker-entrypoint-initdb.d/post_bootstrap.sql
+      - patroni3_data:/var/lib/postgresql/data
+      - ./patroni/patroni.yml:/etc/patroni.yml:ro
+    ports:
+      - "5435:5432"
+      - "8028:8008"
+
+  haproxy:
+    image: haproxy:2.6-alpine
+    container_name: haproxy
+    volumes:
+      - ./patroni/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    depends_on:
+      - haproxy
+      - postgres_exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres_exporter
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${TARGET_DB}?sslmode=disable
+      - PG_EXPORTER_EXTEND_QUERY_STATEMENTS=true
+    ports:
+      - "9187:9187"
+    depends_on:
+      - haproxy
+    command:
+      - "--collector.stat_statements"
+      - "--collector.statio_user_indexes"
+      - "--collector.database_wraparound"
+      - "--collector.long_running_transactions"
+      - "--collector.postmaster"
+      - "--collector.process_idle"
+      - "--collector.stat_activity_autovacuum"
+      - "--collector.stat_wal_receiver"
+
+  seed:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+    container_name: seed-script
+    depends_on:
+      - db-setup
+    environment:
+      - APP_ENV=${APP_ENV}
+      - SEED_COUNT=${SEED_COUNT}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TARGET_DB=${TARGET_DB}
+      - MIGRATION_VERSION=${MIGRATION_VERSION}
+
+  user_service:
+    build:
+      context: ./python/fake_service
+      dockerfile: Service.Dockerfile
+    container_name: user_service
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TARGET_DB=${TARGET_DB}
+    depends_on:
+      - db-setup
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
+  etcd_data:
+  patroni1_data:
+  patroni2_data:
+  patroni3_data:
+  pgadmin_data:
+  grafana_data:
+
+
+networks:
+  haproxy:
+    driver: bridge

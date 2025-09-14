@@ -1,0 +1,17 @@
+CREATE INDEX idx_user_roles_role ON user_roles(role_id);
+CREATE INDEX idx_devices_user ON devices(user_id);
+CREATE INDEX idx_activity_user ON activity_history(user_id);
+CREATE INDEX idx_activity_device ON activity_history(device_id);
+CREATE INDEX idx_activity_action ON activity_history(action_id);
+CREATE INDEX idx_pdr_timezone ON personal_data_records(time_zone_id);
+CREATE INDEX idx_user_addresses_address ON user_addresses(address_id);
+CREATE INDEX idx_family_members_group ON family_group_members(group_id, user_id);
+CREATE INDEX idx_support_agents_active ON support_agents(is_active);
+CREATE INDEX idx_support_sessions_agent_status ON support_sessions(agent_id, session_status);
+CREATE INDEX idx_support_messages_session ON support_messages(session_id);
+CREATE INDEX idx_support_msg_attach_msg ON support_message_attachments(message_id);
+CREATE INDEX idx_snt_service ON service_notification_types(service_id);
+CREATE INDEX idx_usn_disabled_notification ON user_service_notification_disabled(service_notification_type_id);
+CREATE INDEX idx_bank_cards_user ON bank_cards(user_id);
+CREATE INDEX idx_transactions_user_status_date ON transactions(user_id, status);
+CREATE INDEX idx_transactions_service ON transactions(service_id);

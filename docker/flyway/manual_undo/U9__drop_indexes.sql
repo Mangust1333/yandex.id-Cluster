@@ -1,0 +1,17 @@
+DROP INDEX IF EXISTS idx_user_roles_role;
+DROP INDEX IF EXISTS idx_devices_user;
+DROP INDEX IF EXISTS idx_activity_user;
+DROP INDEX IF EXISTS idx_activity_device;
+DROP INDEX IF EXISTS idx_activity_action;
+DROP INDEX IF EXISTS idx_pdr_timezone;
+DROP INDEX IF EXISTS idx_user_addresses_address;
+DROP INDEX IF EXISTS idx_family_members_group;
+DROP INDEX IF EXISTS idx_support_agents_active;
+DROP INDEX IF EXISTS idx_support_sessions_agent_status;
+DROP INDEX IF EXISTS idx_support_messages_session;
+DROP INDEX IF EXISTS idx_support_msg_attach_msg;
+DROP INDEX IF EXISTS idx_snt_service;
+DROP INDEX IF EXISTS idx_usn_disabled_notification;
+DROP INDEX IF EXISTS idx_bank_cards_user;
+DROP INDEX IF EXISTS idx_transactions_user_status_date;
+DROP INDEX IF EXISTS idx_transactions_service;

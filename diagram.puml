@@ -1,0 +1,646 @@
+@startuml ERdiagramm
+left to right direction
+
+
+/' Все отношения находятся в 3НФ, пояснения прописаны в каждом entity '/
+
+entity users {
+    user_id: UUID [PK]
+    ----
+    login: varchar(32) [UNIQUE]
+    avatar: text [UNIQUE]
+    is_premium_user: boolean
+    /' Все атрибуты зависят только от user_id. Нет транзитивных зависимостей. '/
+}
+
+entity user_credentials {
+    user_id: UUID [PK, FK -> users.user_id]
+    --
+    password_hash: varchar(255)
+    password_salt: varchar(255)
+    password_last_changed: timestamp
+    /' Все данные зависят от user_id. '/
+
+}
+
+entity personal_data_records {
+    user_id: UUID [PK, FK -> users.user_id]
+    time_zone_id: smallint [FK -> time_zones.time_zone_id]
+    ----
+    name: varchar(39)
+    surname: varchar(39)
+    gender: Gender
+    birth_date: date
+    locality: varchar(100)
+    nickname: varchar(39)
+    /' Нет избыточности, каждый атрибут напрямую зависит от user_id. '/
+}
+
+entity time_zones {
+    time_zone_id: smallint [PK]
+    ----
+    utc_offset: interval
+    city: varchar(100)
+    /' city и utc_offset зависят от time_zone_id, нет транзитивных зависимостей. '/
+}
+
+entity passports {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    seria: char(4)
+    number: char(6)
+    name: varchar(39)
+    surname: varchar(39)
+    patronymic: varchar(39)
+    birth_date: date
+    locality: varchar(100)
+    gender: Gender
+    issued_by_whom: varchar(100)
+    unit_code: char(6)
+    date_of_issue: date
+    registration_address: varchar(100)
+    /' Каждое поле — характеристика паспорта, однозначно связана с user_id. 
+    Может показаться, что транзитивная зависимость присутствует для seria и number,
+    но в яндексе данные никак не валидируются и спокойно можно добавлять паспорта
+    с одинаковыми сериями и номерами, но разными фамилиями '/
+}
+
+entity international_passports {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    number: char(9)
+    surname: varchar(39)
+    latin_surname: varchar(39)
+    name: varchar(39)
+    latin_name: varchar(39)
+    patronymic: varchar(39)
+    latin_patronymic: varchar(39)
+    nationality: varchar(50)
+    latin_nationality: varchar(50)
+    birth_date: date
+    birth_place: varchar(50)
+    latin_birth_place: varchar(50)
+    gender: Gender
+    date_of_issue: date
+    expiration date: date
+    issued_by_whom: varchar(100)
+    /' Все данные являются непосредственными атрибутами паспорта.
+    Данные также никак не валидируются'/ 
+}
+
+entity birth_certificates {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    seria: char(2)
+    number: char(6)
+    name: varchar(39)
+    surname: varchar(39)
+    patronymic: varchar(39)
+    birth_date: date
+    birth_place: varchar(50)
+    birth_certificate_record_number: char(21)
+    father_name: varchar(39)
+    father_surname: varchar(39)
+    father_patronymic: varchar(39)
+    father_birth_date: date
+    father_nationality: varchar(50)
+    mother_name: varchar(39)
+    mother_surname: varchar(39)
+    mother_patronymic: varchar(39)
+    mother_birth_date: date
+    mother_nationality: varchar(50)
+    state_registration_place: varchar(50)
+    issue_certificate_place: varchar(50)
+    date_of_issue: date
+    /' Никаких зависимостей между неключевыми атрибутами.
+    Данные никак не валидируются, а значит не зависят друг от друга,
+    вся валидация лежит на самом пользователе'/
+}
+
+entity driver_licenses {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    number: char(10)
+    surname: varchar(39)
+    latin_surname: varchar(39)
+    name: varchar(39)
+    latin_name: varchar(39)
+    patronymic: varchar(39)
+    latin_patronymic: varchar(39)
+    birth_date: date
+    birth_place: varchar(50)
+    latin_birth_place: varchar(50)
+    date_of_issue: date
+    expiration_date: date
+    issued_by_whom: varchar(100)
+    issued_by_whom_latin: varchar(100)
+    issue_place: varchar(100)
+    issue_place_latin: varchar(100)
+    categories: varchar(3)
+    special_marks: varchar(255)
+    /' Все данные уникальны и описывают одну сущность — водительское удостоверение.
+    Данные также никак не валидируются'/
+}
+
+entity driver_license_categories {
+    driver_license_user_id: UUID [PK, FK -> driver_licenses.user_id]
+    category: varchar(5) [PK]
+    /' Полный составной ключ определяет каждое поле. '/
+}
+
+entity vehicle_registration_certificates {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    seria: char(4) [PK]
+    number: char(6) [PK]
+    registration_number: char(8)
+    vin: char(17)
+    brand: varchar(50)
+    brand_latin: varchar(50)
+    model: varchar(50)
+    model_latin: varchar(50)
+    vehicle_type: varchar(50)
+    vehicle_category: varchar(50)
+    manufacture_year: smallint
+    chassis_number: varchar(17)
+    body_number: varchar(17)
+    color: varchar(20)
+    engine_power_kw: float
+    engine_power_hp: float
+    ec_class: varchar(20)
+    max_allowed_weight: float
+    curb_weight: float
+    registration_expiration_date: date
+    pts_number: char(15)
+    surname: varchar(39)
+    surname_latin: varchar(39)
+    name: varchar(39)
+    name_latin: varchar(39)
+    patronymic: varchar(39)
+    registration_address: varchar(100)
+    subdivision_code: char(6)
+    issue_date: date
+    special_marks: varchar(255)
+    /' Нет зависимостей между неключевыми атрибутами. '/
+}
+
+entity compulsory_medical_insurances {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    number: char(16)
+    surname: varchar(39)
+    name: varchar(39)
+    patronymic: varchar(39)
+    birth_date: date
+    gender: Gender
+    blank_number: char(4)
+    blank_seria: char(7)
+    /' Нет зависимостей между неключевыми атрибутами. '/
+}
+
+entity voluntary_medical_insurances {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    number: char(16)
+    surname: varchar(39)
+    name: varchar(39)
+    patronymic: varchar(39)
+    birth_date: date
+    gender: Gender
+    date_of_issue: date
+    expiration_date: date
+    insurer: varchar(100)
+    /' Все данные о добровольной страховке описывают одну сущность. '/
+}
+
+entity taxpayer_identification_numbers {
+    user_id: UUID [PK, FK -> users.user_id]
+    --
+    inn: char(12)
+    surname: varchar(39)
+    name: varchar(39)
+    patronymic: varchar(39)
+    birth_date: date
+    place_of_birth: varchar(50)
+    gender: Gender
+    issuing_authority: varchar(100)
+    date_of_issue: date
+    /' Все данные ИНН уникальны для user_id, без транзитивных зависимостей. '/
+}
+
+entity social_insurance_numbers {
+    user_id: UUID [PK, FK -> users.user_id]
+    --
+    snils: char(11)
+    surname: varchar(39)
+    name: varchar(50)
+    patronymic: varchar(50)
+    birth_date: date
+    gender: Gender
+    registration_date: date
+    /' Данные напрямую зависят от user_id, без избыточности. '/
+}
+
+entity services {
+    service_id: UUID [PK]
+    ----
+    service_name: varchar(100)
+    /' Простой справочник. Название зависит только от service_id. '/
+}
+
+entity service_address_notes {
+    user_id [PK, FK -> users.user_id]
+    addresses_id: UUID [PK, FK -> addresses.address_id]
+    service_id: UUID [PK, FK -> services] 
+    ----
+    description: text
+    /' Комбинация ключей определяет уникальные заметки. '/
+}
+
+entity user_addresses {
+    user_id: UUID [PK, FK -> users.user_id]
+    address_id [PK, FK -> addresses.address_id]
+    ----
+    main_description: text
+    address_type: addressType
+    entrance: varchar(10)
+    floor: varchar(10)
+    apartment: varchar(10)
+    intercom: varchar(10)
+    --
+    constraint unique_home_address: UNIQUE(user_id, address_type) WHERE address_type = 'HOME'
+    constraint unique_work_address: UNIQUE(user_id, address_type) WHERE address_type = 'WORK'
+    /' Адрес описан в отдельной таблице. Атрибуты зависят только от составного PK. '/
+}
+
+entity addresses {
+    address_id: UUID [PK]
+    ----
+    name_of_address: varchar(20)
+    country: varchar(100)
+    region: varchar(100)
+    city: varchar(100)
+    street: varchar(100)
+    building: varchar(10)
+    [UNIQUE]
+    /' address_id определяет все характеристики адреса. '/
+}
+
+entity bank_cards {
+    bank_card_id: char(16) [PK, UNIQUE]
+    user_id: UUID [FK -> users.user_id]
+    --
+    cardholder_name: varchar(100)
+    expiration_date: date
+    payment_system: PaymentSystem
+    bank_name: varchar(100)
+    is_default: boolean
+    /' Каждое поле описывает конкретную карту, зависящую от card_id. '/
+}
+
+entity transactions {
+    transaction_id: UUID [PK]
+    user_id: UUID [FK -> users.user_id]
+    bank_card_id: UUID [FK -> bank_cards.bank_card_id]
+    service_id: UUID [FK -> services.service_id]
+    --
+    amount: decimal(10,2)
+    currency: char(3)
+    status: TransactionStatus
+    transaction_type: TransactionType
+    description: varchar(255)
+    created_at: timestamp
+    check: varchar(100) [UNIQUE]
+    /' Каждая транзакция имеет уникальный ID. Поля зависят только от него. '/
+}
+
+entity recovery_methods {
+    method_id: UUID [PK]
+    user_id: UUID [FK -> users.user_id]
+    --
+    method_type: RecoveryMethodType
+    is_active: boolean
+    /' Тип метода и статус — характеристики конкретного способа. '/
+}
+
+entity phone_numbers {
+    user_id: UUID [PK, FK -> users.user_id]
+    --
+    phone_number: varchar(15)
+    is_verified: boolean
+    /' Каждый номер телефона связан с user_id. '/
+}
+
+entity security_questions {
+    user_id: UUID [PK, FK -> users.user_id]
+    --
+    question: varchar(255)
+    answer: varchar(255) [encrypted]
+    /' Вопрос и ответ хранятся для конкретного пользователя. '/
+}
+
+entity backup_emails {
+    email_id: UUID [PK]
+    user_id: UUID [FK -> users.user_id]
+    --
+    email: varchar(100)
+    is_verified: boolean
+    /' email_id определяет все атрибуты записи. '/
+}
+
+entity devices {
+    device_id: UUID [PK]
+    user_id: UUID [FK -> users.user_id]
+    --
+    device_type: DeviceType
+    device_name: varchar(100)
+    os: varchar(50)
+    os_version: varchar(50)
+    last_login: timestamp
+    last_ip: varchar(45)
+    created_at: timestamp
+    /' Атрибуты описывают конкретное устройство. '/
+}
+
+entity actions {
+    action_id: UUID [PK]
+    --
+    action_name: varchar(100) [UNIQUE]
+    action_description: text
+    /' Название и описание действия зависят только от action_id. '/
+}
+
+entity activity_history {
+    activity_id: UUID [PK]
+    user_id: UUID [FK -> users.user_id]
+    device_id: UUID [FK -> devices.device_id]
+    action_id: UUID [FK -> actions.action_id]
+    --
+    details: text
+    created_at: timestamp
+    /' Атрибуты описывают конкретное действие пользователя. '/
+}
+
+entity family_groups {
+    group_id: UUID [PK]
+    --
+    group_name: varchar(100)
+    created_at: timestamp
+    /' Название и дата создания зависят только от group_id. '/
+}
+
+entity family_group_members {
+    user_id: UUID [PK, FK -> users.user_id]
+    group_id: UUID [PK, FK -> family_groups.group_id]
+    --
+    role: FamilyGroupRole
+    added_at: timestamp
+    /' Членство описано составным ключом. Поля зависят от него. '/
+}
+
+entity support_agents {
+    agent_id: UUID [PK]
+    --
+    agent_name: varchar(100)
+    email: varchar(100) [UNIQUE]
+    created_at: timestamp
+    is_active: boolean
+    /' Атрибуты описывают одного агента. '/
+}
+
+entity support_sessions {
+    session_id: UUID [PK]
+    user_id: UUID [FK -> users.user_id]
+    agent_id: UUID [FK -> support_agents.agent_id]
+    --
+    session_status: SupportSessionStatus
+    started_at: timestamp
+    closed_at: timestamp
+    /' Атрибуты описывают сессию поддержки. '/
+}
+
+entity support_messages {
+    message_id: UUID [PK]
+    session_id: UUID [FK -> support_sessions.session_id]
+    --
+    sender: SupportMessagesSenderType
+    reaction_type: SupportMessagesReactionType
+    message_text: text
+    sent_at: timestamp
+    /' Сообщение описано message_id, все поля относятся к нему. '/
+}
+
+entity support_message_attachments {
+    attachment_id: UUID [PK]
+    message_id: UUID [FK -> support_messages.message_id]
+    ----
+    file_url: varchar(255)
+    file_type: varchar(50)
+    uploaded_at: timestamp
+    /' Атрибуты описывают прикрепленный файл к сообщению. '/
+}
+
+entity user_service_notification_disabled {
+    user_id: UUID [PK, FK -> users.user_id]
+    service_notification_type_id: UUID [PK]
+    /' Составной ключ определяет отключенные уведомления. '/
+}
+
+entity service_notification_types {
+    service_notification_type_id: UUID [PK]
+    ----
+    service_id: UUID [FK -> services.service_id]
+    notification_type_id: UUID [FK -> notification_types.notification_type_id]
+    /' Каждая запись определяет тип уведомления для сервиса. '/
+}
+
+entity notification_types {
+    notification_type_id: UUID [PK]
+    ----
+    type_name: NotificationNameType
+    description: varchar(255)
+    /' Название и описание типа уведомления зависят только от notification_type_id. '/
+}
+
+
+entity user_roles {
+    user_id: UUID [PK, FK -> users.user_id]
+    ----
+    role_id: UUID [FK -> roles.role_id]
+    /' Роль зависит только от первичного ключа '/
+}
+
+entity roles {
+    role_id: UUID [PK]
+    ----
+    role: varchar(20)
+    /' Простая справочная таблица ролей. '/
+}
+
+enum Gender {
+    MALE
+    FEMALE
+}
+
+enum AddressType {
+    HOME
+    WORK
+    OTHER
+}
+
+enum PaymentSystem {
+    VISA
+    MASTERCARD
+    MIR
+    AMEX
+    JCB
+    UNIONPAY
+}
+
+enum TransactionStatus {
+    PENDING
+    SUCCESS
+    FAILED
+    CANCELED
+}
+
+enum TransactionType {
+    PAYMENT
+    REFUND
+}
+
+enum RecoveryMethodType {
+    PHONE
+    EMAIL
+    SECURITY_QUESTION
+}
+
+enum DeviceType {
+    SMARTPHONE
+    TABLET
+    PC
+    LAPTOP
+    OTHER
+}
+
+enum FamilyGroupRole {
+    ADMIN
+    ADULT
+    CHILD
+}
+
+enum SupportSessionStatus {
+    OPEN
+    CLOSED
+    PENDING
+}
+
+enum SupportMessagesSenderType {
+    USER
+    AGENT
+}
+
+enum SupportMessagesReactionType {
+    NONE
+    LIKE
+    DISLIKE
+    LAUGH
+    LOVE
+    SAD
+    ANGRY
+}
+
+enum NotificationNameType {
+    CALL
+    PUSH
+    SMS
+    EMAIL
+    OTHER
+}
+
+users::user_id ||--|| user_credentials::user_id : "1:1"
+users::user_id ||--|| personal_data_records::user_id : "1:1"
+users::user_id ||--|| passports::user_id : "1:1"
+users::user_id ||--|| international_passports::user_id : "1:1"
+users::user_id ||--|| birth_certificates::user_id : "1:1"
+users::user_id ||--|| driver_licenses::user_id : "1:1"
+users::user_id ||--|| compulsory_medical_insurances::user_id : "1:1"
+users::user_id ||--|| voluntary_medical_insurances::user_id : "1:1"
+users::user_id ||--|| taxpayer_identification_numbers::user_id : "1:1"
+users::user_id ||--|| social_insurance_numbers::user_id : "1:1"
+users::user_id ||--o{ vehicle_registration_certificates::user_id : "1:N"
+users::user_id ||--o{ user_addresses::user_id : "1:N"
+users::user_id ||--o{ bank_cards::user_id : "1:N"
+users::user_id ||--o{ transactions::user_id : "1:N"
+users::user_id ||--o{ recovery_methods::user_id : "1:N"
+users::user_id ||--o{ phone_numbers::user_id : "1:N"
+users::user_id ||--o{ devices::user_id : "1:N"
+users::user_id ||--o{ activity_history::user_id : "1:N"
+users::user_id ||--o{ family_group_members::user_id : "1:N"
+users::user_id ||--o{ support_sessions::user_id : "1:N"
+users::user_id ||--o{ user_service_notification_disabled::user_id : "1:N"
+users::user_id ||--|| user_roles::user_id : "1:1"
+
+time_zones::time_zone_id ||--o{ personal_data_records::time_zone_id : "1:N"
+
+driver_licenses::user_id ||--o{ driver_license_categories::driver_license_user_id : "1:N"
+
+services::service_id ||--o{ transactions::service_id : "1:N"
+services::service_id ||--o{ service_address_notes::service_id : "1:N"
+services::service_id ||--o{ service_notification_types::service_id : "1:N"
+
+addresses::address_id ||--o{ user_addresses::address_id : "1:N"
+
+user_addresses::address_id ||--|| service_address_notes::addresses_id : "1:N"
+
+bank_cards::bank_card_id ||--o{ transactions::bank_card_id : "1:N"
+
+recovery_methods::user_id ||--o{ phone_numbers::user_id : "1:N"
+recovery_methods::user_id ||--o{ backup_emails::user_id : "1:N"
+recovery_methods::user_id ||--|| security_questions::user_id : "1:N"
+
+devices::device_id ||--o{ activity_history::device_id : "1:N"
+
+actions::action_id ||--o{ activity_history::action_id : "1:N"
+
+family_groups::group_id ||--o{ family_group_members::group_id : "1:N"
+
+support_agents::agent_id ||--o{ support_sessions::agent_id : "1:N"
+
+support_sessions::session_id ||--o{ support_messages::session_id : "1:N"
+
+support_messages::message_id ||--o{ support_message_attachments::message_id : "1:N"
+
+service_notification_types::service_notification_type_id ||--o{ user_service_notification_disabled::service_notification_type_id : "1:N"
+service_notification_types::notification_type_id ||--o{ notification_types::notification_type_id : "1:N"
+
+user_roles::role_id ||--|| roles::role_id : "1:1"
+
+personal_data_records::gender }o--|| Gender
+passports::gender }o--|| Gender
+international_passports::gender }o--|| Gender
+compulsory_medical_insurances::gender }o--|| Gender
+voluntary_medical_insurances::gender }o--|| Gender
+taxpayer_identification_numbers::gender }o--|| Gender
+social_insurance_numbers::gender }o--|| Gender
+
+addresses::address_type }o--|| AddressType
+
+bank_cards::payment_system }o--|| PaymentSystem
+
+transactions::status }o--|| TransactionStatus
+transactions::transaction_type }o--|| TransactionType
+
+recovery_methods::method_type }o--|| RecoveryMethodType
+
+devices::device_type }o--|| DeviceType
+
+family_group_members::role }o--|| FamilyGroupRole
+
+support_sessions::session_status }o--|| SupportSessionStatus
+support_messages::sender }o--|| SupportMessagesSenderType
+support_messages::reaction_type }o--|| SupportMessagesReactionType
+
+notification_types::type_name }o--|| NotificationNameType
+
+@enduml
